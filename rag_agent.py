@@ -18,10 +18,30 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_HOST = "https://uae-demo-2-vhze9sb.svc.aped-4627-b74a.pinecone.io"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
-FIREBASE_SERVICE_ACCOUNT_PATH = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
 FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET")
 
-if not all([NEBIUS_API_KEY, PINECONE_API_KEY, GEMINI_API_KEY, PINECONE_HOST, FIRECRAWL_API_KEY, FIREBASE_SERVICE_ACCOUNT_PATH, FIREBASE_STORAGE_BUCKET]):
+# Build Firebase credentials from environment variables
+FIREBASE_CREDENTIALS_DICT = {
+    "type": os.getenv("FIREBASE_TYPE"),
+    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+    "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
+    "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n'),
+    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+    "client_id": os.getenv("FIREBASE_CLIENT_ID"),
+    "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
+    "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
+    "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_X509_CERT_URL"),
+    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL"),
+    "universe_domain": os.getenv("FIREBASE_UNIVERSE_DOMAIN"),
+}
+
+if not all([
+    NEBIUS_API_KEY, PINECONE_API_KEY, GEMINI_API_KEY, PINECONE_HOST, FIRECRAWL_API_KEY, FIREBASE_STORAGE_BUCKET,
+    FIREBASE_CREDENTIALS_DICT["type"], FIREBASE_CREDENTIALS_DICT["project_id"], FIREBASE_CREDENTIALS_DICT["private_key_id"],
+    FIREBASE_CREDENTIALS_DICT["private_key"], FIREBASE_CREDENTIALS_DICT["client_email"], FIREBASE_CREDENTIALS_DICT["client_id"],
+    FIREBASE_CREDENTIALS_DICT["auth_uri"], FIREBASE_CREDENTIALS_DICT["token_uri"], FIREBASE_CREDENTIALS_DICT["auth_provider_x509_cert_url"],
+    FIREBASE_CREDENTIALS_DICT["client_x509_cert_url"], FIREBASE_CREDENTIALS_DICT["universe_domain"]
+]):
     raise ValueError("API keys, Pinecone host, or Firebase credentials are missing. Please check your .env file and script configuration.")
 
 # --- Clients ---
@@ -41,7 +61,7 @@ firecrawl_app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
 
 # Firebase Client
 try:
-    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+    cred = credentials.Certificate(FIREBASE_CREDENTIALS_DICT)
     firebase_admin.initialize_app(cred, {
         'storageBucket': FIREBASE_STORAGE_BUCKET
     })
@@ -236,6 +256,7 @@ def query_agent(question, index, k=30):
     prompt = f"""
     You are a helpful assistant. Use the following context from a document to answer the question.
     If the context doesn't contain the answer, state that you couldn't find the information in the document.
+    NOTE: DO NOT USE ANYTHING OTHER THAN THE CONTEXT TO ANSWER THE QUESTION.
 
     Context:
     ---
