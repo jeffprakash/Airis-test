@@ -1,0 +1,10 @@
+pinecone>=3.2.2
+google-generativeai
+openai
+pypdf
+python-dotenv
+tqdm
+requests
+firecrawl-py
+streamlit
+firebase-admin 
