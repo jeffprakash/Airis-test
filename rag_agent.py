@@ -9,6 +9,7 @@ from firecrawl import FirecrawlApp
 import firebase_admin
 from firebase_admin import credentials, storage
 import io
+import time
 
 # --- Configuration ---
 load_dotenv()
@@ -111,9 +112,13 @@ def clean_markdown_content(markdown_list):
 
 
 # --- PDF and Text Processing ---
-def upload_and_process_pdf(pdf_file, index):
+def upload_and_process_pdf(pdf_file, index, progress_callback=None):
     """Uploads PDF to Firebase, extracts text, and ingests it."""
     file_name = pdf_file.name
+    
+    if progress_callback:
+        progress_callback(0, "Starting PDF upload...")
+    
     # 1. Upload to Firebase Storage
     try:
         bucket = storage.bucket()
@@ -122,6 +127,9 @@ def upload_and_process_pdf(pdf_file, index):
         pdf_file.seek(0)
         blob.upload_from_file(pdf_file, content_type='application/pdf')
         print(f"☁️ Uploaded '{file_name}' to Firebase Storage at gs://{bucket.name}/{blob.name}")
+        
+        if progress_callback:
+            progress_callback(20, "PDF uploaded to storage, extracting text...")
 
         # 2. Extract text from the PDF file in memory
         print(f"📄 Reading text from {file_name}...")
@@ -130,25 +138,33 @@ def upload_and_process_pdf(pdf_file, index):
         text = "".join(page.extract_text() for page in reader.pages)
         print(f"✅ Extracted {len(text)} characters.")
         
+        if progress_callback:
+            progress_callback(40, "Text extracted, processing chunks...")
+        
         # 3. Ingest the extracted text data
-        ingest_data(text, file_name, index)
+        ingest_data(text, file_name, index, progress_callback)
         
     except Exception as e:
         print(f"❌ An error occurred during PDF processing: {e}")
-        # Optionally re-raise or handle the exception as needed
         raise
 
 
-def scrape_website(url):
+def scrape_website(url, progress_callback=None):
     """Scrapes a website and returns its content in markdown format."""
+    if progress_callback:
+        progress_callback(0, "Starting website scraping...")
+    
     print(f"🕸️  Scraping {url} with Firecrawl...")
     scrape_result = firecrawl_app.scrape_url(url,formats=['markdown', 'html'])
-
-    # print("scrape_result",type(scrape_result),"markdown",scrape_result.markdown)
+    
+    if progress_callback:
+        progress_callback(50, "Website scraped, cleaning content...")
 
     cleaned_markdown = clean_markdown_content(scrape_result.markdown)
-
-    # print("cleaned_markdown",cleaned_markdown)
+    
+    if progress_callback:
+        progress_callback(70, "Content cleaned...")
+    
     return cleaned_markdown
 
 
@@ -183,13 +199,23 @@ def setup_pinecone_index():
     print("✅ Connection successful.")
     return index
 
-def ingest_data(text_content, source_name, index):
+def ingest_data(text_content, source_name, index, progress_callback=None):
     """Chunks text, creates embeddings, and upserts them into Pinecone."""
+    if progress_callback:
+        progress_callback(40, "Creating text chunks...")
+    
     chunks = chunk_text(text_content)
+    total_chunks = len(chunks)
     
     print(f"🧠 Generating embeddings and preparing vectors for {source_name}...")
     vectors = []
-    for i, chunk in enumerate(tqdm(chunks, desc="Embedding chunks")):
+    
+    for i, chunk in enumerate(chunks):
+        if progress_callback:
+            # Calculate progress from 50 to 90 based on chunk processing
+            chunk_progress = 50 + int((i / total_chunks) * 40)
+            progress_callback(chunk_progress, f"Processing chunk {i+1}/{total_chunks}...")
+        
         embedding = get_embedding(chunk)
         vector = {
             "id": f"{source_name}-chunk-{i}",
@@ -202,12 +228,19 @@ def ingest_data(text_content, source_name, index):
         print(f"No vectors created for {source_name}. Skipping ingestion.")
         return
 
+    if progress_callback:
+        progress_callback(90, "Uploading to knowledge hub...")
+
     print(f"⬆️  Upserting {len(vectors)} vectors to Pinecone...")
     # Upsert in batches to avoid overwhelming the API
     batch_size = 100
     for i in range(0, len(vectors), batch_size):
         batch = vectors[i:i+batch_size]
         index.upsert(vectors=batch)
+    
+    if progress_callback:
+        progress_callback(100, "Complete!")
+    
     print(f"✅ Ingestion complete for {source_name}.")
 
 # --- RAG Pipeline ---

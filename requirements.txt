@@ -2,6 +2,7 @@ pinecone>=3.2.2
 google-generativeai
 openai
 pypdf
+PyPDF2
 python-dotenv
 tqdm
 requests
